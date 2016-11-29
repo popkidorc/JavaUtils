@@ -33,63 +33,110 @@ public class ObjectUtils {
      *
      * @param object
      * @param clazz
-     *            对象的类
-     * @param _actualTypeClazz
-     *            泛型类，例如List<_actualTypeClazz>
+     *            对象的类，无范型
      * @return
      * @throws Exception
      */
-    public static <T> T getNotNullObject(T object, Class<T> clazz, List<Class> _actualTypeClazzes) throws Exception {
-        if (null == clazz) {
-            throw new Exception("clazz is NULL");
+    @SuppressWarnings("rawtypes")
+    public static <T> T getNotNullObject(T object, Class<T> clazz) {
+        return getNotNullObject(object, clazz, new ArrayList<Class>());
+    }
+
+    /**
+     * 
+     * 将任意对象及对象内属性转为非null对象。深度转换，自动创建对象（对于多个构造方法的类，使用第一个能够成功的构造方法进行实例化）。
+     *
+     * @author sunjie at 2016年7月28日
+     *
+     * @param object
+     * @param clazz
+     *            对象的类
+     * @param _actualTypeClazz
+     *            泛型类，单范型，例如List
+     * @return
+     * @throws Exception
+     */
+    @SuppressWarnings("rawtypes")
+    public static <T> T getNotNullObject(T object, Class<T> clazz, Class _actualTypeClazz) {
+        List<Class> _actualTypeClazzes = new ArrayList<Class>();
+        if (null != _actualTypeClazz) {
+            _actualTypeClazzes.add(_actualTypeClazz);
         }
-        if (null == object) {
-            object = (T) ObjectUtils.getNewInstance(clazz, null);
-            return ObjectUtils.getNotNullObject(object, clazz, null);
-        }
-        if (clazz.isPrimitive()) {
-            return (T) ObjectUtils.getPrimitiveDefault(clazz);
-        }
-        if (clazz.isEnum()) {
-            return (T) ObjectUtils.getEnumDefault(clazz);
-        }
-        if (clazz.isInterface()) {
-            return ObjectUtils.getInterfaceNotNullObject(object, clazz, _actualTypeClazzes);
-        }
-        // TODO 目前未实现，数组对象
-        if (clazz.isArray()) {
-            return ObjectUtils.getArrayNotNullObject(object, clazz);
-        }
-        if (!clazz.isAnnotation() && !clazz.isInterface() && !clazz.isArray() && !clazz.equals(object.getClass())) {
-            throw new Exception("object.getClass() and clazz is NOT EQUAL, clazz:" + clazz + ", obejctClass:"
-                    + object.getClass());
-        }
-        Field[] declaredFields = getSuperFields(clazz);
-        Field.setAccessible(declaredFields, true);
-        for (Field field : declaredFields) {
-            // final放过
-            if (Modifier.isFinal(field.getModifiers())) {
-                continue;
+        return getNotNullObject(object, clazz, _actualTypeClazzes);
+    }
+
+    /**
+     * 
+     * 将任意对象及对象内属性转为非null对象。深度转换，自动创建对象（对于多个构造方法的类，使用第一个能够成功的构造方法进行实例化）。
+     *
+     * @author sunjie at 2016年7月28日
+     *
+     * @param object
+     * @param clazz
+     *            对象的类
+     * @param _actualTypeClazz
+     *            泛型类，多范型，例如Map
+     * @return
+     * @throws Exception
+     */
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    public static <T> T getNotNullObject(T object, Class<T> clazz, List<Class> _actualTypeClazzes) {
+        try {
+            if (null == clazz) {
+                throw new Exception("clazz is NULL");
             }
-            Object fieldObject = field.get(object);
-            Class fieldClass = field.getType();
-            List<Class> fieldActualTypeClazzes = null;
-            // 判断泛型
-            if (field.getGenericType() instanceof ParameterizedType) {
-                ParameterizedType parameterizedType = (ParameterizedType) field.getGenericType();
-                fieldActualTypeClazzes = new ArrayList<Class>();
-                for (Type type : parameterizedType.getActualTypeArguments()) {
-                    fieldActualTypeClazzes.add((Class) type);
+            if (null == object) {
+                return ObjectUtils.getNotNullObject((T) ObjectUtils.getNewInstance(clazz, _actualTypeClazzes), clazz,
+                        _actualTypeClazzes);
+            }
+            if (clazz.isPrimitive()) {
+                return object;
+            }
+            if (clazz.isEnum()) {
+                return object;
+            }
+            if (clazz.isInterface()) {
+                return ObjectUtils.getInterfaceNotNullObject(object, clazz, _actualTypeClazzes);
+            }
+            if (clazz.isArray()) {
+                return ObjectUtils.getArrayNotNullObject(object, clazz, _actualTypeClazzes);
+            }
+            if (!clazz.isAnnotation() && !clazz.isInterface() && !clazz.isArray() && !clazz.equals(object.getClass())) {
+                throw new Exception("object.getClass() and clazz is NOT EQUAL, clazz:" + clazz + ", obejctClass:"
+                        + object.getClass());
+            }
+            // 获取父类字段
+            Field[] declaredFields = getSuperFields(clazz);
+            Field.setAccessible(declaredFields, true);
+            for (Field field : declaredFields) {
+                // final放过
+                if (Modifier.isFinal(field.getModifiers())) {
+                    continue;
                 }
+                Object fieldObject = field.get(object);
+                Class fieldClass = field.getType();
+                List<Class> fieldActualTypeClazzes = null;
+                // 判断泛型
+                if (field.getGenericType() instanceof ParameterizedType) {
+                    ParameterizedType parameterizedType = (ParameterizedType) field.getGenericType();
+                    fieldActualTypeClazzes = new ArrayList<Class>();
+                    for (Type type : parameterizedType.getActualTypeArguments()) {
+                        fieldActualTypeClazzes.add((Class) type);
+                    }
+                }
+                if (null == fieldObject) {
+                    fieldObject = ObjectUtils.getNewInstance(fieldClass, fieldActualTypeClazzes);
+                }
+                field.set(object, ObjectUtils.getNotNullObject(fieldObject, fieldClass, fieldActualTypeClazzes));
             }
-            if (null == fieldObject) {
-                fieldObject = ObjectUtils.getNewInstance(fieldClass, fieldActualTypeClazzes);
-            }
-            field.set(object, ObjectUtils.getNotNullObject(fieldObject, fieldClass, fieldActualTypeClazzes));
+        } catch (Exception e) {
+            System.err.println("NotNullObject is ERROR , object:" + object + ", class:" + clazz
+                    + ", _actualTypeClazzes:" + _actualTypeClazzes + ", e:" + e.getMessage());
         }
         return object;
     }
 
+    @SuppressWarnings("rawtypes")
     private static Field[] getSuperFields(Class clazz) {
         if (null == clazz) {
             return new Field[] {};
@@ -114,6 +161,7 @@ public class ObjectUtils {
      * @return
      * @throws Exception
      */
+    @SuppressWarnings({ "rawtypes", "unchecked" })
     private static <T> T getInterfaceNotNullObject(T object, Class<T> clazz, List<Class> _actualTypeClazzes)
             throws Exception {
         if (List.class.equals(clazz)) {
@@ -127,15 +175,15 @@ public class ObjectUtils {
                 if (null == entry) {
                     entry = ObjectUtils.getNewInstance(actualTypeClazz, null);
                 }
-                entry = ObjectUtils.getNotNullObject(entry, actualTypeClazz, null);
-                list.set(i, entry);
+                entry = ObjectUtils.getNotNullObject(entry, actualTypeClazz, new ArrayList<Class>());
+                list.remove(i);
+                list.add(i, entry);
             }
             return object;
         }
         if (Map.class.equals(clazz)) {
             Map map = (Map) object;
             Class actualTypeClazz = Object.class;
-            int i = 0;
             for (Object key : map.keySet()) {
                 if (!ObjectUtils.isEmpty(_actualTypeClazzes) && _actualTypeClazzes.size() > 1) {
                     actualTypeClazz = _actualTypeClazzes.get(1);// 取value的class
@@ -144,9 +192,8 @@ public class ObjectUtils {
                 if (null == entry) {
                     entry = ObjectUtils.getNewInstance(actualTypeClazz, null);
                 }
-                entry = ObjectUtils.getNotNullObject(entry, actualTypeClazz, null);
+                entry = ObjectUtils.getNotNullObject(entry, actualTypeClazz, new ArrayList<Class>());
                 map.put(key, entry);
-                i++;
             }
             return object;
         }
@@ -159,24 +206,24 @@ public class ObjectUtils {
      *
      * @author sunjie at 2016年7月28日
      *
-     * @param object
+     * @param arrayObject
      * @param clazz
      * @param _actualTypeClazz
      * @return
      * @throws Exception
      */
-    private static <T> T getArrayNotNullObject(T object, Class<T> clazz) throws Exception {
-        Object[] array = (Object[]) object;
-        Class actualTypeClazz = clazz.getComponentType();
-        for (int i = 0; i < array.length; i++) {
-            Object entry = array[i];
-            if (null == entry) {
-                entry = ObjectUtils.getNewInstance(actualTypeClazz, null);
-            }
-            entry = ObjectUtils.getNotNullObject(entry, actualTypeClazz, null);
-            array[i] = entry;
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    private static <T> T getArrayNotNullObject(T arrayObject, Class<T> clazz, List<Class> _actualTypeClazzes)
+            throws Exception {
+        Object[] objectArray = (Object[]) arrayObject;
+        Class arrayClass = clazz.getComponentType();
+        if (objectArray.length <= 0) {
+            return (T) Array.newInstance(arrayClass, objectArray.length);
         }
-        return object;
+        for (int i = 0; i < objectArray.length; i++) {
+            objectArray[i] = ObjectUtils.getNotNullObject(arrayClass.cast(objectArray[i]), arrayClass);
+        }
+        return (T) objectArray;
     }
 
     /**
@@ -188,6 +235,7 @@ public class ObjectUtils {
      * @param clazz
      * @return
      */
+    @SuppressWarnings("rawtypes")
     private static Object getPrimitiveDefault(Class clazz) {
         if (Boolean.TYPE.equals(clazz)) {
             return false;
@@ -209,6 +257,7 @@ public class ObjectUtils {
      * @return
      * @throws Exception
      */
+    @SuppressWarnings("rawtypes")
     private static Object getInterfaceDefault(Class clazz, List<Class> _actualTypeClazzes) throws Exception {
         if (List.class.equals(clazz)) {
             return new ArrayList();
@@ -231,8 +280,9 @@ public class ObjectUtils {
      * @return
      * @throws Exception
      */
+    @SuppressWarnings("rawtypes")
     private static Object getArrayDefault(Class clazz, List<Class> _actualTypeClazzes) throws Exception {
-        return Array.newInstance(clazz.getComponentType(), 0);
+        return new ArrayList().toArray();
     }
 
     /**
@@ -247,6 +297,7 @@ public class ObjectUtils {
      * @return
      * @throws Exception
      */
+    @SuppressWarnings({ "rawtypes", "unchecked" })
     private static Object getEnumDefault(Class clazz) throws Exception {
         Field[] declaredFields = clazz.getDeclaredFields();
         for (Field field : declaredFields) {
@@ -268,6 +319,7 @@ public class ObjectUtils {
      * @return
      * @throws Exception
      */
+    @SuppressWarnings({ "rawtypes", "unchecked" })
     private static Object getNewInstance(Class clazz, List<Class> _actualTypeClazzes) throws Exception {
         // 基本类型
         if (clazz.isPrimitive()) {
